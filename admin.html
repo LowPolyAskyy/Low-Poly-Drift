@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Admin - Low Poly Drift</title>
+<link rel="icon" type="image/png" href="favicon.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<style>
+:root{color-scheme:dark;--bg:#14121c;--p:#211d2e;--p2:#2b2640;--t:#f1ecf7;--m:#a79fb8;--a:#ff8a4c;--ok:#7dff9b;--bad:#ff7a6a}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--t);font:15px/1.4 system-ui,sans-serif;padding:16px;max-width:1000px;margin:auto}
+h1{margin:0 0 4px}h2{margin:0 0 10px;font-size:17px}
+.card{background:var(--p);border-radius:14px;padding:14px;margin:12px 0}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+button{background:var(--a);color:#1a1208;border:0;border-radius:9px;padding:8px 12px;font-weight:700;cursor:pointer}
+button.g{background:var(--p2);color:var(--t)}button.r{background:var(--bad)}
+input,select{background:#120f1b;color:var(--t);border:1px solid #3a3350;border-radius:8px;padding:8px;min-width:0}
+small,.m{color:var(--m)}
+.pl{display:flex;gap:8px;align-items:center;justify-content:space-between;background:#120f1b;border-radius:10px;padding:6px 10px;margin:6px 0;flex-wrap:wrap}
+.tag{font-size:12px;padding:2px 8px;border-radius:99px;color:#111;font-weight:700;background:var(--ok)}.tag.race{background:#ffb36b}.tag.vote{background:#8ab4ff}
+#msg{min-height:22px;color:var(--ok)}#msg.e{color:var(--bad)}
+</style>
+</head>
+<body>
+<h1>Admin panel</h1>
+<small>Low Poly Drift &middot; test tools</small>
+<div id="msg"></div>
+
+<div class="card" id="login">
+  <h2>Password</h2>
+  <div class="row"><input id="pw" type="password" placeholder="Admin password" autocomplete="current-password"><button id="go">Enter</button></div>
+  <small>Default password is <b>admin</b> (only from this PC). Set the ADMIN_PASSWORD environment variable to change it or to open the panel from another device.</small>
+</div>
+
+<div id="main" style="display:none">
+  <div class="card">
+    <h2>My account (this browser)</h2>
+    <div class="row">
+      <input id="myc" type="number" value="1000" style="width:120px">
+      <button id="addme">Give me coins</button>
+      <button id="setme" class="g">Set my coins</button>
+      <button id="unl" class="g">Unlock all cars</button>
+      <button id="rst" class="r">Reset my progress</button>
+    </div>
+    <p class="m" id="mine"></p>
+    <small>If the game is open in another tab, reload it to see the new coins.</small>
+  </div>
+
+  <div class="card">
+    <h2>All rooms</h2>
+    <div class="row">
+      <button data-c="finish" data-all="1">Finish everybody (with rewards)</button>
+      <button data-c="end" data-all="1" class="g">End all races</button>
+      <button data-c="startvote" data-all="1" class="g">Start vote everywhere</button>
+    </div>
+  </div>
+
+  <div id="rooms"></div>
+</div>
+
+<script>
+const $=id=>document.getElementById(id);
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const CARS=14,MAPN=['Sunset Hills','Neon City','Deep Jungle','Desert Canyon','Cherry Grove','Frozen Peaks','Ember Crater','Coral Coast','Autumn Ridge'];
+const POWERS=[['nitro','Nitro'],['boost','Boost'],['grip','Super Grip'],['steer','Pro Steer'],['dk','Drift King'],['x2','Score x2'],['shield','Shield'],['ghost','Ghost'],['hover','Hover'],['off','Off-road'],['smash','Cone Smash'],['clock','Time -3s'],['mini','Mini'],['assist','Auto Assist'],['supernitro','Mega Nitro'],['bonus','Score +250'],['repair','Recovery']];
+let pw=sessionStorage.apw||'',busy=false,editing=false;
+function say(t,e){const m=$('msg');m.textContent=t;m.className=e?'e':'';clearTimeout(say.t);say.t=setTimeout(()=>m.textContent='',4000)}
+async function api(o){
+  const r=await fetch('/admin/api',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(Object.assign({pw},o))});
+  const j=await r.json().catch(()=>({ok:false,error:'Bad answer'}));
+  if(!j.ok)throw new Error(j.error||'Error');return j}
+async function login(){
+  pw=$('pw').value||pw;
+  try{await api({cmd:'state'});sessionStorage.apw=pw;$('login').style.display='none';$('main').style.display='';refresh();say('Welcome')}
+  catch(e){$('login').style.display='';$('main').style.display='none';say(e.message,1)}}
+$('go').onclick=login;$('pw').onkeydown=e=>{if(e.key==='Enter')login()};
+if(pw){$('pw').value=pw;login()}
+
+function mine(){let c=0,o=[];try{c=+localStorage.dn_coins||0;o=JSON.parse(localStorage.dn_owned2||'[0]')}catch(e){}$('mine').textContent='Coins: '+c+' · cars owned: '+o.length+'/'+CARS}
+const lsSet=(c,o)=>{try{if(c!==null)localStorage.dn_coins=Math.max(0,c|0);if(o)localStorage.dn_owned2=JSON.stringify(o);mine()}catch(e){say('Cannot write browser storage',1)}};
+$('addme').onclick=()=>{lsSet((+localStorage.dn_coins||0)+($('myc').value|0));say('Coins added')};
+$('setme').onclick=()=>{lsSet($('myc').value|0);say('Coins set')};
+$('unl').onclick=()=>{lsSet(null,Array.from({length:CARS},(_,i)=>i));say('All cars unlocked')};
+$('rst').onclick=()=>{if(confirm('Reset your coins and cars?')){lsSet(0,[0]);localStorage.dn_car2=0;say('Progress reset')}};
+mine();
+
+async function run(o,okmsg){try{const j=await api(o);say(okmsg||('Done: '+(j.done??0)));if(j.rooms)draw(j.rooms)}catch(e){say(e.message,1)}}
+document.addEventListener('click',e=>{const b=e.target.closest('button[data-c]');if(!b)return;
+  const o={cmd:b.dataset.c,room:b.dataset.all?'*':b.dataset.room};if(b.dataset.id)o.id=b.dataset.id;
+  if(b.dataset.c==='kick'&&!confirm('Kick this player?'))return;run(o)});
+
+function draw(list){
+  if(editing)return;
+  $('rooms').innerHTML=list.length?list.map(r=>`<div class="card" data-r="${esc(r.key)}">
+   <div class="row" style="justify-content:space-between"><h2>${esc(r.name)} <span class="tag ${r.state}">${r.state}</span></h2><small>${r.pub?'public':'private'} &middot; ${r.players.length} players${r.state!=='wait'?' &middot; '+Math.ceil(r.left/1000)+'s left':''}</small></div>
+   <div class="row">
+     <button data-c="finish" data-room="${esc(r.key)}">Finish everybody</button>
+     <button data-c="end" data-room="${esc(r.key)}" class="g">End race</button>
+     <button data-c="startvote" data-room="${esc(r.key)}" class="g">Start vote</button>
+     <select class="map">${MAPN.map((n,i)=>`<option value="${i}">${n}</option>`).join('')}</select>
+     <button class="g" data-act="startrace">Start race on map</button>
+   </div>
+   <div class="row" style="margin-top:8px">
+     <input class="amt" type="number" value="500" style="width:110px"><button class="g" data-act="coins" data-id="all">Give coins to all</button>
+     <button class="g" data-act="unlock" data-id="all">Unlock cars for all</button>
+     <select class="pwr">${POWERS.map(p=>`<option value="${p[0]}">${p[1]}</option>`).join('')}</select><button class="g" data-act="power" data-id="all">Power-up to all</button>
+   </div>
+   <div class="row" style="margin-top:8px"><input class="say" maxlength="60" placeholder="Message to the room" style="flex:1"><button class="g" data-act="say">Send</button></div>
+   ${r.players.map(p=>`<div class="pl"><span><b>${esc(p.name)}</b>${p.host?' (host)':''} <small>#${esc(p.id)} &middot; car ${p.car} &middot; score ${p.score} &middot; idle ${p.idle}s${p.fin!=null?' &middot; finished':''}</small></span>
+     <span class="row"><button class="g" data-act="coins" data-id="${esc(p.id)}">+coins</button><button class="g" data-act="unlock" data-id="${esc(p.id)}">Unlock</button><button class="g" data-act="power" data-id="${esc(p.id)}">Power</button><button class="r" data-c="kick" data-room="${esc(r.key)}" data-id="${esc(p.id)}">Kick</button></span></div>`).join('')}
+  </div>`).join(''):'<div class="card"><p class="m">No rooms right now. Create or join a room from the lobby to test.</p></div>'}
+
+document.addEventListener('click',e=>{const b=e.target.closest('button[data-act]');if(!b)return;
+  const card=b.closest('[data-r]'),room=card.dataset.r,a=b.dataset.act,o={cmd:a,room,id:b.dataset.id};
+  if(a==='startrace'){o.map=card.querySelector('.map').value}
+  if(a==='coins')o.amount=card.querySelector('.amt').value|0;
+  if(a==='power')o.k=card.querySelector('.pwr').value;
+  if(a==='say'){o.text=card.querySelector('.say').value;if(!o.text)return}
+  run(o)});
+document.addEventListener('focusin',e=>{if(e.target.matches('.amt,.say,select'))editing=true});
+document.addEventListener('focusout',()=>{editing=false});
+
+async function refresh(){if($('main').style.display==='none')return;try{const j=await api({cmd:'state'});draw(j.rooms)}catch(e){}}
+setInterval(refresh,2000);
+</script>
+</body>
+</html>
