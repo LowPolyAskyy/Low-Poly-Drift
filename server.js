@@ -20,6 +20,7 @@ const AFK_WARN_MS = Math.max(0, AFK_MS - 20000);                                
 const MOVE_EPS = 3;                                                                             // units a car must travel to count as 'moving'
 const validElo = (v) => Math.max(0, Math.min(9999, (+v) | 0));
 const validCar = (v) => Math.max(0, Math.min(CAR_TYPES - 1, (+v) | 0));
+const validWrap = (v) => (/^[a-z0-9_-]{1,40}$/i.test(String(v || '')) ? String(v) : '');
 let nextPub = 1;
 
 // addresses other devices on the same Wi-Fi/LAN can use (virtual adapters are skipped, Wi-Fi first)
@@ -77,6 +78,11 @@ const server = http.createServer((req, res) => {
     });
     return;
   }
+  if (p === '/gift/claim') {
+    const ip = req.socket.remoteAddress || '?';
+    try { return json(res, Object.assign({ ok: true }, giftClaim(u.searchParams.get('t')))); }
+    catch (e) { return json(res, { ok: false, error: String(e.message || e) }); }
+  }
   // active public rooms (shown in the lobby)
   if (p === '/rooms') {
     return json(res, [...rooms.values()].filter((r) => r.pub).map((r) => ({
@@ -114,6 +120,38 @@ function adminOk(ip, pw) {
   return ok;
 }
 
+
+// ---- gift links: created in the admin panel, signed by the server (cannot be forged), single use enforced here ----
+const GIFT_SECRET = process.env.GIFT_SECRET || ('lpd-gift:' + (process.env.ADMIN_PASSWORD || 'admin'));
+const GIFT_FILE = path.join(__dirname, 'gifts-used.json');
+const giftUsed = new Set(); try { for (const k of JSON.parse(fs.readFileSync(GIFT_FILE, 'utf8'))) giftUsed.add(k); } catch {}
+const b64u = (b) => Buffer.from(b).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+const giftSig = (body) => b64u(crypto.createHmac('sha256', GIFT_SECRET).update(body).digest()).slice(0, 22);
+function giftMake(b) {
+  const t = String(b.type || '');
+  if (!['wrap', 'car', 'coins', 'allcars'].includes(t)) throw new Error('Unknown gift type');
+  let v = b.value;
+  if (t === 'wrap') { v = validWrap(v); if (!v) throw new Error('Pick a wrap'); }
+  else if (t === 'car') { v = (+v) | 0; if (v < 0 || v >= CAR_TYPES) throw new Error('Pick a car'); }
+  else if (t === 'coins') { v = Math.max(1, Math.min(1000000, (+v) | 0)); }
+  else v = 0;
+  const k = String(b.code || '').toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 30) || crypto.randomBytes(4).toString('hex');
+  const body = b64u(JSON.stringify({ t, v, m: b.multi ? 0 : 1, k, f: String(b.from || '').slice(0, 30) }));
+  return { token: body + '.' + giftSig(body), code: k };
+}
+function giftClaim(token) {
+  const [body, sig] = String(token || '').split('.');
+  if (!body || !sig) throw new Error('Invalid gift link');
+  const a = Buffer.from(sig), c = Buffer.from(giftSig(body));
+  if (a.length !== c.length || !crypto.timingSafeEqual(a, c)) throw new Error('Invalid gift link');
+  let g; try { g = JSON.parse(Buffer.from(body.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8')); } catch { throw new Error('Invalid gift link'); }
+  if (g.m === 1) {
+    if (giftUsed.has(g.k)) throw new Error('This gift link was already used');
+    giftUsed.add(g.k); try { fs.writeFileSync(GIFT_FILE, JSON.stringify([...giftUsed])); } catch {}
+  }
+  return { t: g.t, v: g.v, f: g.f };
+}
+
 const wss = new WebSocketServer({ server, maxPayload: 2048 });
 const rooms = new Map(); // code -> { code, players: Map(id -> {ws,name,slot}), host }
 let nextId = 1;
@@ -124,7 +162,7 @@ const broadcast = (room, o, exceptId) => {
 };
 const roster = (room) => {
   const players = {};
-  for (const [id, p] of room.players) players[id] = { name: p.name, slot: p.slot, car: p.car, elo: p.elo };
+  for (const [id, p] of room.players) players[id] = { name: p.name, slot: p.slot, car: p.car, wrap: p.wrap || '', elo: p.elo };
   return { t: 'players', host: room.host, players };
 };
 const num = (v) => (Number.isFinite(+v) ? +v : 0);
@@ -164,7 +202,7 @@ wss.on('connection', (ws) => {
       const used = new Set([...r.players.values()].map((p) => p.slot));
       let slot = 0; while (used.has(slot)) slot++;
       id = String(nextId++); room = r;
-      r.players.set(id, { ws, name: String(m.name || 'Player').slice(0, 12), slot, car: validCar(m.car), elo: validElo(m.elo), score: 0, prog: 0, fin: null, ax: null, az: null, moved: Date.now() });
+      r.players.set(id, { ws, name: String(m.name || 'Player').slice(0, 12), slot, car: validCar(m.car), wrap: validWrap(m.wrap), elo: validElo(m.elo), score: 0, prog: 0, fin: null, ax: null, az: null, moved: Date.now() });
       if (!r.host) r.host = id;
       send(ws, { t: 'welcome', id, slot, code: r.name, pub: r.pub, phase: r.state, left: Math.max(0, r.endsAt - Date.now()), maps: r.maps, votes: voteCounts(r) });
       broadcast(r, roster(r));
@@ -202,7 +240,7 @@ wss.on('connection', (ws) => {
     } else if (m.t === 'elo') {
       const p = room.players.get(id); if (p) { p.elo = validElo(m.elo); broadcast(room, roster(room)); }
     } else if (m.t === 'car') {
-      const p = room.players.get(id); if (p) { p.car = validCar(m.car); broadcast(room, roster(room)); }
+      const p = room.players.get(id); if (p) { p.car = validCar(m.car); p.wrap = validWrap(m.wrap); broadcast(room, roster(room)); }
     }
   });
 
@@ -285,6 +323,7 @@ function startVote(room) {
 }
 function adminCmd(b) {
   const cmd = String(b.cmd || '');
+  if (cmd === 'mklink') return giftMake(b);
   if (cmd === 'state') return { rooms: roomList(), matchMin: MATCH_MS / 60000, maps: MAPS };
   const sel = b.room === '*' || !b.room ? [...rooms.values()] : [rooms.get(String(b.room))].filter(Boolean);
   if (!sel.length) throw new Error('No room selected');

@@ -41,10 +41,27 @@ small,.m{color:var(--m)}
       <button id="addme">Give me coins</button>
       <button id="setme" class="g">Set my coins</button>
       <button id="unl" class="g">Unlock all cars</button>
+      <select id="mywrap"></select><button id="givewrap" class="g">Give me wrap</button>
+      <select id="mycar"></select><button id="givecar" class="g">Give me car</button>
       <button id="rst" class="r">Reset my progress</button>
     </div>
     <p class="m" id="mine"></p>
     <small>If the game is open in another tab, reload it to see the new coins.</small>
+  </div>
+
+  <div class="card">
+    <h2>Gift links</h2>
+    <div class="row">
+      <select id="lt"><option value="wrap">Wrap</option><option value="car">Car</option><option value="coins">Coins</option><option value="allcars">Unlock all cars</option></select>
+      <select id="lv"></select><input id="lc" type="number" value="500" style="width:110px;display:none">
+      <select id="lm"><option value="0">Single use</option><option value="1">Unlimited</option></select>
+    </div>
+    <div class="row" style="margin-top:8px">
+      <input id="lk" maxlength="30" placeholder="Custom code (optional)"><input id="lf" maxlength="30" placeholder="From" value="Admin">
+      <input id="lb" placeholder="Base URL" style="flex:1;min-width:220px"><button id="lgo">Create link</button>
+    </div>
+    <div id="lout" style="margin-top:8px;word-break:break-all"></div>
+    <small>Links are signed by the server, so nobody can make their own. Single-use links work once for the first person who opens them.</small>
   </div>
 
   <div class="card">
@@ -86,6 +103,22 @@ $('setme').onclick=()=>{lsSet($('myc').value|0);say('Coins set')};
 $('unl').onclick=()=>{lsSet(null,Array.from({length:CARS},(_,i)=>i));say('All cars unlocked')};
 $('rst').onclick=()=>{if(confirm('Reset your coins and cars?')){lsSet(0,[0]);localStorage.dn_car2=0;say('Progress reset')}};
 mine();
+
+const wrapOptsHtml=()=>wrapOpts();
+$('mywrap').innerHTML=wrapOpts();
+$('mycar').innerHTML=typeof RANKS==='undefined'?'':RANKS.map((r,i)=>`<option value="${i}">${esc(r.v)}</option>`).join('');
+$('givewrap').onclick=()=>{try{const id=$('mywrap').value;if(!id)return;const w=JSON.parse(localStorage.dn_wraps||'[]');if(!w.includes(id))w.push(id);localStorage.dn_wraps=JSON.stringify(w);say('Wrap added');mine()}catch(e){say('Cannot write browser storage',1)}};
+$('givecar').onclick=()=>{try{const i=+$('mycar').value,o=JSON.parse(localStorage.dn_owned2||'[0]');if(!o.includes(i))o.push(i);lsSet(null,o);say('Car added')}catch(e){say('Cannot write browser storage',1)}};
+function lvFill(){const t=$('lt').value;$('lv').style.display=t==='wrap'||t==='car'?'':'none';$('lc').style.display=t==='coins'?'':'none';
+  $('lv').innerHTML=t==='wrap'?wrapOpts():t==='car'&&typeof RANKS!=='undefined'?RANKS.map((r,i)=>`<option value="${i}">${esc(r.v)}</option>`).join(''):''}
+$('lt').onchange=lvFill;lvFill();
+$('lb').value=location.origin+'/shop.html';
+$('lgo').onclick=async()=>{try{const t=$('lt').value,v=t==='coins'?$('lc').value:$('lv').value;
+  const j=await api({cmd:'mklink',type:t,value:v,multi:$('lm').value==='1',code:$('lk').value,from:$('lf').value});
+  const base=($('lb').value||location.origin+'/shop.html').split('?')[0].split('#')[0],url=base+'?gift='+j.token;
+  $('lout').innerHTML='<a href="'+esc(url)+'" style="color:var(--a)">'+esc(url)+'</a><br><button class="g" id="lcp" style="margin-top:6px">Copy link</button>';
+  $('lcp').onclick=()=>navigator.clipboard.writeText(url).then(()=>say('Link copied')).catch(()=>say('Copy it manually',1));
+ }catch(e){say(e.message,1)}};
 
 async function run(o,okmsg){try{const j=await api(o);say(okmsg||('Done: '+(j.done??0)));if(j.rooms)draw(j.rooms)}catch(e){say(e.message,1)}}
 document.addEventListener('click',e=>{const b=e.target.closest('button[data-c]');if(!b)return;
