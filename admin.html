@@ -76,11 +76,16 @@ small,.m{color:var(--m)}
   <div id="rooms"></div>
 </div>
 
-<script src="cars.js"></script>
+<script>
+// lists copied from the game's cars.js (kept here so the admin works even if cars.js is not on this server)
+const RAR={common:{n:'Common'},rare:{n:'Rare'},epic:{n:'Epic'},legendary:{n:'Legendary'}},RAR_ORDER=['common','rare','epic','legendary'];
+const WRAPS=[{id:"red",n:"Cherry Red",r:"common"},{id:"sky",n:"Sky Blue",r:"common"},{id:"lime",n:"Lime Pop",r:"common"},{id:"sun",n:"Sunshine",r:"common"},{id:"tang",n:"Tangerine",r:"common"},{id:"pink",n:"Bubblegum",r:"common"},{id:"mid",n:"Midnight",r:"common"},{id:"pearl",n:"Pearl",r:"common"},{id:"teal",n:"Lagoon",r:"common"},{id:"violet",n:"Grape",r:"common"},{id:"slate",n:"Slate",r:"common"},{id:"dots",n:"Polka Pop",r:"common"},{id:"candy",n:"Candy Diagonal",r:"common"},{id:"race-b",n:"Racing Blue",r:"rare"},{id:"race-r",n:"Racing Red",r:"rare"},{id:"check",n:"Checkered",r:"rare"},{id:"zig",n:"Mint Zigzag",r:"rare"},{id:"camo-f",n:"Forest Camo",r:"rare"},{id:"camo-d",n:"Desert Camo",r:"rare"},{id:"tartan",n:"Tartan",r:"rare"},{id:"hazard",n:"Hazard Stripes",r:"rare"},{id:"flame-r",n:"Hellfire",r:"epic"},{id:"flame-b",n:"Blue Flame",r:"epic"},{id:"tiger",n:"Tiger",r:"epic"},{id:"zebra",n:"Zebra",r:"epic"},{id:"carbon",n:"Carbon Fiber",r:"epic"},{id:"waves",n:"Ocean Waves",r:"epic"},{id:"argyle",n:"Argyle",r:"epic"},{id:"sunset",n:"Sunset",r:"epic"},{id:"arctic",n:"Arctic Camo",r:"epic"},{id:"rainbow",n:"Rainbow Flow",r:"legendary"},{id:"neon",n:"Neon Grid",r:"legendary"},{id:"gold",n:"Midas Gold",r:"legendary"},{id:"chrome",n:"Liquid Chrome",r:"legendary"},{id:"nebula",n:"Nebula",r:"legendary"},{id:"mint",n:"Mint Fresh",r:"common"},{id:"coral",n:"Coral",r:"common"},{id:"navy",n:"Navy",r:"common"},{id:"pstripe",n:"Pinstripe",r:"common"},{id:"hex",n:"Honeycomb",r:"rare"},{id:"belt",n:"Racing Belt",r:"rare"},{id:"leop",n:"Leopard",r:"rare"},{id:"aurora",n:"Aurora",r:"epic"},{id:"circ",n:"Circuit Board",r:"epic"},{id:"rosegold",n:"Rose Gold",r:"epic"},{id:"holo",n:"Holographic",r:"legendary"},{id:"lava",n:"Magma",r:"legendary"},{id:"tnt",n:"TNT Block",r:"epic"},{id:"flori",n:"Flower Meadow",r:"rare"},{id:"carta",n:"Paper Page",r:"rare"},{id:"notte",n:"Moonlit Night",r:"epic"},{id:"mattina",n:"Sunny Morning",r:"epic"},{id:"macchie",n:"Color Blots",r:"legendary"},{id:"android",n:"Droid Sides",r:"rare"},{id:"apple",n:"Apple Sides",r:"rare"},{id:"gears",n:"Clockwork Gears",r:"epic"}];
+const RANKS=[{v:"Fiat 500"},{v:"VW Golf GTI"},{v:"Alfa Romeo Giulia"},{v:"BMW M3"},{v:"Mercedes AMG GT"},{v:"Dodge Challenger"},{v:"Porsche 911"},{v:"Audi R8"},{v:"Ferrari F8"},{v:"Lamborghini Huracan"},{v:"McLaren 720S"},{v:"Bugatti Chiron"},{v:"Koenigsegg Jesko"},{v:"Rocket Car"},{v:"Pocket Mini"},{v:"City Taxi"},{v:"Hippie Van"},{v:"Ice Cream Van"},{v:"Trail Jeep"},{v:"Raptor Pickup"},{v:"Police Interceptor"},{v:"Dune Buggy"},{v:"Flame Hot Rod"},{v:"Time Machine"},{v:"Steel Truck"},{v:"Monster Truck"},{v:"Formula Racer"},{v:"Neon Hover"}];
+</script>
 <script>
 const $=id=>document.getElementById(id);
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-const CARS=14,MAPN=['Sunset Hills','Neon City','Deep Jungle','Desert Canyon','Cherry Grove','Frozen Peaks','Ember Crater','Coral Coast','Autumn Ridge'];
+const CARS=RANKS.length,MAPN=['Sunset Hills','Neon City','Deep Jungle','Desert Canyon','Cherry Grove','Frozen Peaks','Ember Crater','Coral Coast','Autumn Ridge'];
 const POWERS=[['nitro','Nitro'],['boost','Boost'],['grip','Super Grip'],['steer','Pro Steer'],['dk','Drift King'],['x2','Score x2'],['shield','Shield'],['ghost','Ghost'],['hover','Hover'],['off','Off-road'],['smash','Cone Smash'],['clock','Time -3s'],['mini','Mini'],['assist','Auto Assist'],['supernitro','Mega Nitro'],['bonus','Score +250'],['repair','Recovery']];
 let pw=sessionStorage.apw||'',busy=false,editing=false;
 const wrapOpts=()=>typeof WRAPS==='undefined'?'<option value="">(cars.js not loaded)</option>':WRAPS.slice().sort((x,y)=>RAR_ORDER.indexOf(y.r)-RAR_ORDER.indexOf(x.r)).map(w=>`<option value="${w.id}">${esc(w.n)} (${RAR[w.r].n})</option>`).join('');
@@ -112,7 +117,9 @@ $('givecar').onclick=()=>{try{const i=+$('mycar').value,o=JSON.parse(localStorag
 function lvFill(){const t=$('lt').value;$('lv').style.display=t==='wrap'||t==='car'?'':'none';$('lc').style.display=t==='coins'?'':'none';
   $('lv').innerHTML=t==='wrap'?wrapOpts():t==='car'&&typeof RANKS!=='undefined'?RANKS.map((r,i)=>`<option value="${i}">${esc(r.v)}</option>`).join(''):''}
 $('lt').onchange=lvFill;lvFill();
-$('lb').value=location.origin+'/shop.html';
+try{$('lb').value=localStorage.adm_base||''}catch(e){}
+if(!$('lb').value)$('lb').value=location.origin+'/shop.html';
+$('lb').onchange=()=>{try{localStorage.adm_base=$('lb').value}catch(e){}};
 $('lgo').onclick=async()=>{try{const t=$('lt').value,v=t==='coins'?$('lc').value:$('lv').value;
   const j=await api({cmd:'mklink',type:t,value:v,multi:$('lm').value==='1',code:$('lk').value,from:$('lf').value});
   const base=($('lb').value||location.origin+'/shop.html').split('?')[0].split('#')[0],url=base+'?gift='+j.token;

@@ -10,7 +10,7 @@ const { WebSocketServer } = require('ws');
 const PORT = process.env.PORT || 3000;
 const MAX_PLAYERS = 8;
 const MAPS = 9;
-const CAR_TYPES = 14; // number of buyable vehicles (keep equal to the car list in index.html)
+const CAR_TYPES = 28; // number of buyable vehicles (keep equal to the car list in cars.js)
 // Room flow: wait (Trick Park) -> vote (3 random maps) -> race (3 laps) -> wait ...   (env overrides are only meant for testing)
 const MATCH_MS = process.env.MATCH_MS !== undefined ? +process.env.MATCH_MS : 8 * 60 * 1000; // a race lasts at most 8 minutes
 const VOTE_MS = process.env.VOTE_MS !== undefined ? +process.env.VOTE_MS : 15 * 1000;         // time to pick one of the 3 maps
@@ -39,6 +39,7 @@ const STATIC = {
   '/': ['index.html', 'text/html; charset=utf-8'],
   '/index.html': ['index.html', 'text/html; charset=utf-8'],
   '/shop.html': ['shop.html', 'text/html; charset=utf-8'],
+  '/settings.html': ['settings.html', 'text/html; charset=utf-8'],
   '/lobby.html': ['lobby.html', 'text/html; charset=utf-8'],
   '/game.html': ['game.html', 'text/html; charset=utf-8'],
   '/admin': ['admin.html', 'text/html; charset=utf-8'],
