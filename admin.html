@@ -59,12 +59,14 @@ small,.m{color:var(--m)}
   <div id="rooms"></div>
 </div>
 
+<script src="cars.js"></script>
 <script>
 const $=id=>document.getElementById(id);
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const CARS=14,MAPN=['Sunset Hills','Neon City','Deep Jungle','Desert Canyon','Cherry Grove','Frozen Peaks','Ember Crater','Coral Coast','Autumn Ridge'];
 const POWERS=[['nitro','Nitro'],['boost','Boost'],['grip','Super Grip'],['steer','Pro Steer'],['dk','Drift King'],['x2','Score x2'],['shield','Shield'],['ghost','Ghost'],['hover','Hover'],['off','Off-road'],['smash','Cone Smash'],['clock','Time -3s'],['mini','Mini'],['assist','Auto Assist'],['supernitro','Mega Nitro'],['bonus','Score +250'],['repair','Recovery']];
 let pw=sessionStorage.apw||'',busy=false,editing=false;
+const wrapOpts=()=>typeof WRAPS==='undefined'?'<option value="">(cars.js not loaded)</option>':WRAPS.slice().sort((x,y)=>RAR_ORDER.indexOf(y.r)-RAR_ORDER.indexOf(x.r)).map(w=>`<option value="${w.id}">${esc(w.n)} (${RAR[w.r].n})</option>`).join('');
 function say(t,e){const m=$('msg');m.textContent=t;m.className=e?'e':'';clearTimeout(say.t);say.t=setTimeout(()=>m.textContent='',4000)}
 async function api(o){
   const r=await fetch('/admin/api',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(Object.assign({pw},o))});
@@ -106,9 +108,10 @@ function draw(list){
      <button class="g" data-act="unlock" data-id="all">Unlock cars for all</button>
      <select class="pwr">${POWERS.map(p=>`<option value="${p[0]}">${p[1]}</option>`).join('')}</select><button class="g" data-act="power" data-id="all">Power-up to all</button>
    </div>
+   <div class="row" style="margin-top:8px"><select class="wrp">${wrapOpts()}</select><button class="g" data-act="wrap" data-id="all">Gift wrap to all</button></div>
    <div class="row" style="margin-top:8px"><input class="say" maxlength="60" placeholder="Message to the room" style="flex:1"><button class="g" data-act="say">Send</button></div>
    ${r.players.map(p=>`<div class="pl"><span><b>${esc(p.name)}</b>${p.host?' (host)':''} <small>#${esc(p.id)} &middot; car ${p.car} &middot; score ${p.score} &middot; idle ${p.idle}s${p.fin!=null?' &middot; finished':''}</small></span>
-     <span class="row"><button class="g" data-act="coins" data-id="${esc(p.id)}">+coins</button><button class="g" data-act="unlock" data-id="${esc(p.id)}">Unlock</button><button class="g" data-act="power" data-id="${esc(p.id)}">Power</button><button class="r" data-c="kick" data-room="${esc(r.key)}" data-id="${esc(p.id)}">Kick</button></span></div>`).join('')}
+     <span class="row"><button class="g" data-act="coins" data-id="${esc(p.id)}">+coins</button><button class="g" data-act="unlock" data-id="${esc(p.id)}">Unlock</button><button class="g" data-act="power" data-id="${esc(p.id)}">Power</button><button class="g" data-act="wrap" data-id="${esc(p.id)}">Wrap</button><button class="r" data-c="kick" data-room="${esc(r.key)}" data-id="${esc(p.id)}">Kick</button></span></div>`).join('')}
   </div>`).join(''):'<div class="card"><p class="m">No rooms right now. Create or join a room from the lobby to test.</p></div>'}
 
 document.addEventListener('click',e=>{const b=e.target.closest('button[data-act]');if(!b)return;
@@ -116,6 +119,7 @@ document.addEventListener('click',e=>{const b=e.target.closest('button[data-act]
   if(a==='startrace'){o.map=card.querySelector('.map').value}
   if(a==='coins')o.amount=card.querySelector('.amt').value|0;
   if(a==='power')o.k=card.querySelector('.pwr').value;
+  if(a==='wrap'){o.wrap=card.querySelector('.wrp').value;o.from='Admin'}
   if(a==='say'){o.text=card.querySelector('.say').value;if(!o.text)return}
   run(o)});
 document.addEventListener('focusin',e=>{if(e.target.matches('.amt,.say,select'))editing=true});

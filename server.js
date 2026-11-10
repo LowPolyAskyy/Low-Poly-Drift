@@ -49,6 +49,7 @@ const STATIC = {
   '/apple-touch-icon.png': ['apple-touch-icon.png', 'image/png'],
   '/config.js': ['config.js', 'text/javascript; charset=utf-8'],
   '/cars.js': ['cars.js', 'text/javascript; charset=utf-8'],
+  '/carmodel.js': ['carmodel.js', 'text/javascript; charset=utf-8'],
   '/ui.css': ['ui.css', 'text/css; charset=utf-8'],
 };
 const json = (res, o) => { res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': '*' }); res.end(JSON.stringify(o)); };
@@ -298,6 +299,7 @@ function adminCmd(b) {
     else if (cmd === 'say') { broadcast(r, { t: 'toast', text: String(b.text || '').slice(0, 60) }); n++; }
     else if (cmd === 'coins') { const c = Math.max(-1000000, Math.min(1000000, b.amount | 0)); for (const [, p] of pick(r)) { send(p.ws, { t: 'gift', coins: c }); n++; } }
     else if (cmd === 'unlock') { for (const [, p] of pick(r)) { send(p.ws, { t: 'gift', unlock: true }); n++; } }
+    else if (cmd === 'wrap') { const w = String(b.wrap || ''); if (!/^[a-z0-9_-]{1,40}$/i.test(w)) throw new Error('Pick a wrap'); for (const [, p] of pick(r)) { send(p.ws, { t: 'gift', wrap: w, from: String(b.from || '').slice(0, 30) }); n++; } }
     else if (cmd === 'power') { for (const [, p] of pick(r)) { send(p.ws, { t: 'power', k: String(b.k || '').slice(0, 20) }); n++; } }
     else throw new Error('Unknown command');
   }
