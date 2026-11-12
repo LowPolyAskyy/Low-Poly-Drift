@@ -9,8 +9,17 @@ const { WebSocketServer } = require('ws');
 
 const PORT = process.env.PORT || 3000;
 const MAX_PLAYERS = 8;
-const MAPS = 9;
-const CAR_TYPES = 28; // number of buyable vehicles (keep equal to the car list in cars.js)
+const MAPS = 11; // total maps in game.html: 0-8 normal, 9-10 = Christmas maps
+const CAR_TYPES = 31; // number of buyable vehicles (keep equal to the car list in cars.js): 28 + 3 Christmas cars
+// CHRISTMAS EVENT: maps 9 and 10 are only offered 1 Dec 2026 - 3 Jan 2027 (Italy time). Set the env var XMAS_FORCE=1 on Render to test them any time.
+const XMAS_MAPS = [9, 10];
+const xmasOn = () => {
+  if (process.env.XMAS_FORCE === '1') return true;
+  const p = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Rome', year: 'numeric', month: 'numeric', day: 'numeric' }).formatToParts(new Date());
+  const g = (t) => +p.find((x) => x.type === t).value, y = g('year'), m = g('month'), d = g('day');
+  return (y === 2026 && m === 12) || (y === 2027 && m === 1 && d <= 3);
+};
+const mapPool = () => Array.from({ length: MAPS }, (_, i) => i).filter((i) => !XMAS_MAPS.includes(i) || xmasOn());
 // Room flow: wait (Trick Park) -> vote (3 random maps) -> race (3 laps) -> wait ...   (env overrides are only meant for testing)
 const MATCH_MS = process.env.MATCH_MS !== undefined ? +process.env.MATCH_MS : 8 * 60 * 1000; // a race lasts at most 8 minutes
 const VOTE_MS = process.env.VOTE_MS !== undefined ? +process.env.VOTE_MS : 15 * 1000;         // time to pick one of the 3 maps
@@ -20,7 +29,6 @@ const AFK_WARN_MS = Math.max(0, AFK_MS - 20000);                                
 const MOVE_EPS = 3;                                                                             // units a car must travel to count as 'moving'
 const validElo = (v) => Math.max(0, Math.min(9999, (+v) | 0));
 const validCar = (v) => Math.max(0, Math.min(CAR_TYPES - 1, (+v) | 0));
-const validDev = (v) => (['phone', 'tablet', 'pc', 'pad'].includes(v) ? v : ''); // device icon shown next to the name
 const validWrap = (v) => (/^[a-z0-9_-]{1,40}$/i.test(String(v || '')) ? String(v) : '');
 let nextPub = 1;
 
@@ -164,7 +172,7 @@ const broadcast = (room, o, exceptId) => {
 };
 const roster = (room) => {
   const players = {};
-  for (const [id, p] of room.players) players[id] = { name: p.name, slot: p.slot, car: p.car, wrap: p.wrap || '', elo: p.elo, dev: p.dev || '' };
+  for (const [id, p] of room.players) players[id] = { name: p.name, slot: p.slot, car: p.car, wrap: p.wrap || '', elo: p.elo };
   return { t: 'players', host: room.host, players };
 };
 const num = (v) => (Number.isFinite(+v) ? +v : 0);
@@ -204,7 +212,7 @@ wss.on('connection', (ws) => {
       const used = new Set([...r.players.values()].map((p) => p.slot));
       let slot = 0; while (used.has(slot)) slot++;
       id = String(nextId++); room = r;
-      r.players.set(id, { ws, name: String(m.name || 'Player').slice(0, 12), slot, car: validCar(m.car), wrap: validWrap(m.wrap), elo: validElo(m.elo), dev: validDev(m.dev), score: 0, prog: 0, fin: null, ax: null, az: null, moved: Date.now() });
+      r.players.set(id, { ws, name: String(m.name || 'Player').slice(0, 12), slot, car: validCar(m.car), wrap: validWrap(m.wrap), elo: validElo(m.elo), score: 0, prog: 0, fin: null, ax: null, az: null, moved: Date.now() });
       if (!r.host) r.host = id;
       send(ws, { t: 'welcome', id, slot, code: r.name, pub: r.pub, phase: r.state, left: Math.max(0, r.endsAt - Date.now()), maps: r.maps, votes: voteCounts(r) });
       broadcast(r, roster(r));
@@ -221,7 +229,7 @@ wss.on('connection', (ws) => {
     } else if (m.t === 'start' && room.host === id) {
       if (room.state !== 'wait') return; // a vote or a race is already running
       // offer 3 different random maps
-      const all = Array.from({ length: MAPS }, (_, i) => i);
+      const all = mapPool();
       for (let i = all.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [all[i], all[j]] = [all[j], all[i]]; }
       room.state = 'vote'; room.maps = all.slice(0, 3); room.votes = new Map(); room.endsAt = Date.now() + VOTE_MS;
       for (const p of room.players.values()) { p.moved = Date.now(); p.ax = null; }
@@ -241,8 +249,6 @@ wss.on('connection', (ws) => {
       }
     } else if (m.t === 'elo') {
       const p = room.players.get(id); if (p) { p.elo = validElo(m.elo); broadcast(room, roster(room)); }
-    } else if (m.t === 'dev') {
-      const p = room.players.get(id); if (p) { p.dev = validDev(m.dev); broadcast(room, roster(room)); }
     } else if (m.t === 'car') {
       const p = room.players.get(id); if (p) { p.car = validCar(m.car); p.wrap = validWrap(m.wrap); broadcast(room, roster(room)); }
     }
@@ -270,7 +276,7 @@ const voteCounts = (room) => { const c = [0, 0, 0]; for (const v of room.votes.v
 function startRace(room, force) {
   const c = voteCounts(room), best = Math.max(...c);
   const tied = c.map((n, i) => (n === best ? i : -1)).filter((i) => i >= 0); // ties (and nobody voting) are decided by chance
-  const map = force != null ? force : room.maps.length ? room.maps[tied[Math.floor(Math.random() * tied.length)]] : Math.floor(Math.random() * MAPS);
+  const map = force != null ? force : room.maps.length ? room.maps[tied[Math.floor(Math.random() * tied.length)]] : (() => { const pl = mapPool(); return pl[Math.floor(Math.random() * pl.length)]; })();
   room.state = 'race'; room.startedAt = Date.now(); room.endsAt = room.startedAt + MATCH_MS;
   room.raceIds = new Set(room.players.keys()); room.finOrder = [];
   for (const p of room.players.values()) { p.fin = null; p.prog = 0; p.moved = Date.now(); p.ax = null; }
@@ -318,7 +324,7 @@ function finishAll(room) {
 }
 function startVote(room) {
   if (room.state !== 'wait') return false;
-  const all = Array.from({ length: MAPS }, (_, i) => i);
+  const all = mapPool();
   for (let i = all.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [all[i], all[j]] = [all[j], all[i]]; }
   room.state = 'vote'; room.maps = all.slice(0, 3); room.votes = new Map(); room.endsAt = Date.now() + VOTE_MS;
   for (const p of room.players.values()) { p.moved = Date.now(); p.ax = null; }
